@@ -1,61 +1,60 @@
 using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Duende.AccessTokenManagement;
 
-namespace Yarp.ReverseProxy.Swagger.Extensions
+namespace Yarp.ReverseProxy.Swagger.Extensions;
+
+public static class ReverseProxyBuilderExtensions
 {
-    public static class ReverseProxyBuilderExtensions
+    public static IReverseProxyBuilder AddSwagger(
+        this IReverseProxyBuilder builder,
+        IConfigurationSection configurationSection)
     {
-        public static IReverseProxyBuilder AddSwagger(
-            this IReverseProxyBuilder builder,
-            IConfigurationSection configurationSection)
+        if (configurationSection == null)
+            throw new ArgumentNullException(nameof(configurationSection));
+
+        builder.Services.Configure<ReverseProxyDocumentFilterConfig>(configurationSection);
+
+        var config = configurationSection.Get<ReverseProxyDocumentFilterConfig>();
+
+        ConfigureHttpClient(builder, config);
+
+        return builder;
+    }
+
+    public static IReverseProxyBuilder AddSwagger(
+        this IReverseProxyBuilder builder,
+        ReverseProxyDocumentFilterConfig config)
+    {
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+
+        builder.Services.Configure<ReverseProxyDocumentFilterConfig>(overriddenConfig =>
         {
-            if (configurationSection == null)
-                throw new ArgumentNullException(nameof(configurationSection));
+            overriddenConfig.Routes = config.Routes;
+            overriddenConfig.Clusters = config.Clusters;
+            overriddenConfig.Swagger = config.Swagger;
+        });
 
-            builder.Services.Configure<ReverseProxyDocumentFilterConfig>(configurationSection);
+        ConfigureHttpClient(builder, config);
 
-            var config = configurationSection.Get<ReverseProxyDocumentFilterConfig>();
+        return builder;
+    }
 
-            ConfigureHttpClient(builder, config);
-
-            return builder;
-        }
-
-        public static IReverseProxyBuilder AddSwagger(
-            this IReverseProxyBuilder builder,
-            ReverseProxyDocumentFilterConfig config)
+    private static void ConfigureHttpClient(
+        IReverseProxyBuilder builder,
+        ReverseProxyDocumentFilterConfig config)
+    {
+        foreach (var cluster in config.Clusters)
         {
-            if (config == null)
-                throw new ArgumentNullException(nameof(config));
-
-            builder.Services.Configure<ReverseProxyDocumentFilterConfig>(overriddenConfig =>
+            foreach (var destination in cluster.Value.Destinations)
             {
-                overriddenConfig.Routes = config.Routes;
-                overriddenConfig.Clusters = config.Clusters;
-                overriddenConfig.Swagger = config.Swagger;
-            });
+                var httpClientBuilder = builder.Services.AddHttpClient($"{cluster.Key}_{destination.Key}");
 
-            ConfigureHttpClient(builder, config);
-
-            return builder;
-        }
-
-        private static void ConfigureHttpClient(
-            IReverseProxyBuilder builder,
-            ReverseProxyDocumentFilterConfig config)
-        {
-            foreach (var cluster in config.Clusters)
-            {
-                foreach (var destination in cluster.Value.Destinations)
-                {
-                    var httpClientBuilder = builder.Services.AddHttpClient($"{cluster.Key}_{destination.Key}");
-
-                    if (!string.IsNullOrWhiteSpace(destination.Value.AccessTokenClientName))
-                    {
-                        httpClientBuilder.AddClientAccessTokenHandler(destination.Value.AccessTokenClientName);
-                    }
-                }
+                var clientCredentialName = ClientCredentialsClientName.Parse(destination.Value.AccessTokenClientName);
+                
+                if (!string.IsNullOrWhiteSpace(destination.Value.AccessTokenClientName)) httpClientBuilder.AddClientCredentialsTokenHandler(clientCredentialName);
             }
         }
     }

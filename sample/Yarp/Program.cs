@@ -1,4 +1,3 @@
-using IdentityModel.Client;
 using Microsoft.Extensions.Options;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using Yarp.Configs;
@@ -6,6 +5,7 @@ using Yarp.Extensions;
 using Yarp.ReverseProxy.Swagger;
 using Yarp.ReverseProxy.Swagger.Extensions;
 using Yarp.Transformations;
+using Duende.AccessTokenManagement;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,17 +14,17 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddAccessTokenManagement(options =>
-{
-    var identityConfig = builder.Configuration.GetSection("Identity").Get<IdentityConfig>()!;
-    
-    options.Client.Clients.Add("Identity", new ClientCredentialsTokenRequest
+
+
+builder.Services.AddClientCredentialsTokenManagement()
+    .AddClient("yard", client =>
     {
-        Address = $"{identityConfig.Url}/connect/token",
-        ClientId = identityConfig.ClientId,
-        ClientSecret = identityConfig.ClientSecret
+        var identityConfig = builder.Configuration.GetSection("Identity").Get<IdentityConfig>()!;
+        client.TokenEndpoint = new Uri($"{identityConfig.Url}/connect/token");
+        client.ClientId = ClientId.Parse(identityConfig.ClientId);
+        client.ClientSecret = ClientSecret.Parse(identityConfig.ClientSecret);
     });
-});
+
 
 var configuration = builder.Configuration.GetSection("ReverseProxy");
 var configurationForOnlyPublishedRoutes = builder.Configuration.GetSection("ReverseProxyOnlyPublishedRoutes");

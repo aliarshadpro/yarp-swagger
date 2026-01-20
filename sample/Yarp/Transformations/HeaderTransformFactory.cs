@@ -1,4 +1,4 @@
-﻿using Microsoft.OpenApi.Models;
+﻿using Microsoft.OpenApi;
 using System.Net;
 using Yarp.ReverseProxy.Swagger;
 using Yarp.ReverseProxy.Transforms;
@@ -99,8 +99,14 @@ public class HeaderTransformFactory : ITransformFactory, ISwaggerTransformFactor
     {
         if (transformValues.ContainsKey("RenameHeader"))
         {
-            foreach (var parameter in operation.Parameters)
+            if (operation.Parameters == null || operation.Parameters.Count == 0)
             {
+                return true;
+            }
+
+            for (var i = 0; i < operation.Parameters.Count; i++)
+            {
+                var parameter = operation.Parameters[i];
                 if (parameter.In.HasValue && parameter.In.Value.ToString().Equals("Header"))
                 {
                     if (transformValues.TryGetValue("RenameHeader", out var header)
@@ -108,7 +114,28 @@ public class HeaderTransformFactory : ITransformFactory, ISwaggerTransformFactor
                     {
                         if (parameter.Name == newHeader)
                         {
-                            parameter.Name = header;
+                            if (parameter is OpenApiParameter openApiParameter
+                                && openApiParameter.CreateShallowCopy() is OpenApiParameter copy)
+                            {
+                                copy.Name = header;
+                                operation.Parameters[i] = copy;
+                            }
+                            else
+                            {
+                                operation.Parameters[i] = new OpenApiParameter
+                                {
+                                    Name = header,
+                                    In = parameter.In,
+                                    Description = parameter.Description,
+                                    Required = parameter.Required,
+                                    Deprecated = parameter.Deprecated,
+                                    AllowEmptyValue = parameter.AllowEmptyValue,
+                                    Style = parameter.Style,
+                                    Explode = parameter.Explode,
+                                    AllowReserved = parameter.AllowReserved,
+                                    Schema = parameter.Schema
+                                };
+                            }
                         }
                     }
                 }
